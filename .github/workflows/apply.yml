@@ -13,21 +13,11 @@ jobs:
     if: github.event.issue.pull_request != null && github.event.comment.body == '/apply'
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: "${{ github.token }}"
-      PULL_REQUEST: "${{ github.event.issue.pull_request }}"
-      LOGIN: "${{ github.event.comment.user.login }}"
+      GH_TOKEN: ${{ github.token }}
+      PULL_REQUEST: ${{ toJSON(github.event.issue.pull_request) }}
+      LOGIN: ${{ github.event.comment.user.login }}
 
     steps:
-      - name: Check if PR can be rebased
-        run: |
-          state="${{ github.event.issue.pull_request.mergeable_state }}"
-          rebaseable="${{ github.event.issue.pull_request.rebaseable }}"
-          if ! [ "$state" = clean ] || ! [ "$rebaseable" = true ]; then
-            gh pr comment ${{ github.event.issue.pull_request.url }} \
-                -b "error: cannot apply pull request with merge conflicts"
-            exit 1
-          fi
-
       - run: gh auth setup-git
 
       - uses: actions/checkout@v4
