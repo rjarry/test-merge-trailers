@@ -16,13 +16,13 @@ job_url() {
 
 fail() {
 	set +e
-	gh pr comment $(pr url) -b "error: $*\n\n$(job_url)"
+	gh pr comment $(pr id) -b "error: $*\n\n$(job_url)"
 	exit 1
 }
 
 err() {
 	set +e
-	gh pr comment $(pr url) -b "error: command \`$BASH_COMMAND\` failed\n\n$(job_url)"
+	gh pr comment $(pr id) -b "error: command \`$BASH_COMMAND\` failed\n\n$(job_url)"
 	exit 1
 }
 
@@ -45,7 +45,7 @@ email_from_git() {
 	git shortlog -se -w0 --group=author --group=committer \
 		--group=trailer:acked-by --group=trailer:reviewed-by \
 		--group=trailer:reported-by --group=trailer:signed-off-by \
-		--group=trailer:tested-by |
+		--group=trailer:tested-by HEAD |
 	sed -En "s/^[[:space:]]+[0-9]+[[:space:]]+$name <([^@]+@[^>]+)>$/\\1/p"
 }
 
@@ -103,4 +103,4 @@ git checkout $(pr base.ref)
 git merge --ff-only $(pr head.ref)
 git push origin $(pr head.ref)
 
-gh pr comment $(pr url) -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)\n\n$(job_url)"
+gh pr comment $(pr id) -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)\n\n$(job_url)"
