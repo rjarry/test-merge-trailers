@@ -113,9 +113,9 @@ git checkout $(pr base.ref)
 git merge --ff-only $(pr head.ref)
 git push origin $(pr base.ref)
 
+gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$(pr number)/merge" \
+	-f merge_method=rebase || gh pr close $(pr number)
+
 gh pr comment $(pr number) -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)
 
 $(job_url)"
-
-gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$(pr number)/merge" \
-	-f merge_method=rebase || gh pr close $(pr number)
