@@ -6,14 +6,19 @@
 PR_JSON=$(gh api "$PULL_REQUEST")
 
 pr() {
+	set +x
 	local attr=$1
-	echo "$PR_JSON" | jq -r ".$attr"
+	val=$(echo "$PR_JSON" | jq -r ".$attr")
+	echo "$val"
+	set -x
 }
 
 job_url() {
+	set +x
 	local run_id="$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 	local job_id=$(gh api "repos/$run_id/jobs" --jq ".jobs[] | select(.name==\"$GITHUB_JOB\") | .id")
 	echo "https://github.com/$run_id/job/$job_id"
+	set -x
 }
 
 fail() {
@@ -102,6 +107,6 @@ git log --pretty=fuller $(pr base.ref)..$(pr head.ref)
 
 git checkout $(pr base.ref)
 git merge --ff-only $(pr head.ref)
-git push origin $(pr head.ref)
+git push origin $(pr base.ref)
 
 gh pr comment $(pr number) -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)\n\n$(job_url)"
