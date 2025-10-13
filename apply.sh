@@ -76,9 +76,9 @@ user_email() {
 set -xEe -o pipefail
 trap err ERR
 
-permision=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$LOGIN/permission" --jq '.permission')
-if ! [ "$permission" = admin ] && ! [ "$permission" = write ]; then
-	fail "user $LOGIN does not have permission to apply PRs (permission: $permission)"
+perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$LOGIN/permission" --jq '.permission')
+if ! [ "$perm" = admin ] && ! [ "$perm" = write ]; then
+	fail "user $LOGIN does not have permission to apply PRs (permission: $perm)"
 fi
 
 name=$(user_name "$LOGIN")
