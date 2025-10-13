@@ -85,8 +85,8 @@ git remote add pr $(pr head.repo.clone_url)
 git fetch pr
 git checkout -t pr/$(pr head.ref)
 
-tmp=$(mktemp)
-trap "rm -f -- $tmp" EXIT
+tmp=$(mktemp -d)
+trap "rm -rf -- $tmp" EXIT
 
 gh api "repos/$GITHUB_REPOSITORY/pulls/$(pr number)/reviews" --paginate \
 	--jq '.[] | select(.state=="APPROVED") | .user.login' | sort -u |
@@ -94,18 +94,18 @@ while read -r login; do
 	name=$(user_name "$login")
 	email=$(user_email "$login" "$name")
 	echo "Reviewed-by: $name <$email>"
-done >> "$tmp"
+done >> "$tmp/trailers"
 
 gh api "repos/$GITHUB_REPOSITORY/issues/$(pr number)/comments" --paginate \
-	--jq '.[].body | select(test("^(Acked-by|Tested-by|Reviewed-by|Reported-by):\\s*"))' >> "$tmp"
-
-mkdir -p .git/hooks
-cp -af devtools/commit-msg .git/hooks/commit-msg
+	--jq '.[].body | select(test("^(Acked-by|Tested-by|Reviewed-by|Reported-by):\\s*"))' >> "$tmp/trailers"
 
 git log --pretty=fuller $(pr base.ref)..$(pr head.ref)
 
-TRAILERS=$(sort -u "$tmp") git rebase $(pr base.ref) --exec \
-	'git log -1 --pretty="%B$TRAILERS" | git commit --amend -F - --no-edit'
+git rebase $(pr base.ref) --exec \
+	'git log -1 --pretty="adding trailers to %h %s" &&
+git log -1 --pretty=%B > $tmp/msg &&
+devtools/commit-msg $tmp/msg $tmp/trailers &&
+git commit --amend -F $tmp/msg --no-edit'
 
 git log --pretty=fuller $(pr base.ref)..$(pr head.ref)
 
