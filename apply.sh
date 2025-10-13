@@ -18,13 +18,13 @@ job_url() {
 
 fail() {
 	set +e
-	gh pr comment $(pr id) -b "error: $*\n\n$(job_url)"
+	gh pr comment $(pr number) -b "error: $*\n\n$(job_url)"
 	exit 1
 }
 
 err() {
 	set +e
-	gh pr comment $(pr id) -b "error: command \`$BASH_COMMAND\` failed\n\n$(job_url)"
+	gh pr comment $(pr number) -b "error: command \`$BASH_COMMAND\` failed\n\n$(job_url)"
 	exit 1
 }
 
@@ -79,7 +79,7 @@ git checkout -t pr/$(pr head.ref)
 tmp=$(mktemp)
 trap "rm -f -- $tmp" EXIT
 
-gh api "repos/$GITHUB_REPOSITORY/pulls/$(pr id)/reviews" --paginate \
+gh api "repos/$GITHUB_REPOSITORY/pulls/$(pr number)/reviews" --paginate \
 	--jq '.[] | select(.state=="APPROVED") | .user.login' | sort -u |
 while read -r login; do
 	name=$(user_name "$login")
@@ -87,7 +87,7 @@ while read -r login; do
 	echo "Reviewed-by: $name <$email>"
 done >> "$tmp"
 
-gh api "repos/$GITHUB_REPOSITORY/issues/$(pr id)/comments" --paginate \
+gh api "repos/$GITHUB_REPOSITORY/issues/$(pr number)/comments" --paginate \
 	--jq '.[].body | select(test("^(Acked-by|Tested-by|Reviewed-by|Reported-by):\\s*"))' >> "$tmp"
 
 trailers=$(sort -u "$tmp")
@@ -105,4 +105,4 @@ git checkout $(pr base.ref)
 git merge --ff-only $(pr head.ref)
 git push origin $(pr head.ref)
 
-gh pr comment $(pr id) -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)\n\n$(job_url)"
+gh pr comment $(pr number) -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)\n\n$(job_url)"
