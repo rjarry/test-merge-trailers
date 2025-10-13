@@ -1,0 +1,31 @@
+---
+name: Check
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        conf:
+          - compiler: gcc-13
+          - compiler: gcc-14
+          - compiler: clang-15
+          - compiler: clang-16
+          - compiler: clang-18
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set -xe
+          echo super bien
