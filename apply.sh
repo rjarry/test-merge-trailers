@@ -90,14 +90,13 @@ done >> "$tmp"
 gh api "repos/$GITHUB_REPOSITORY/issues/$(pr number)/comments" --paginate \
 	--jq '.[].body | select(test("^(Acked-by|Tested-by|Reviewed-by|Reported-by):\\s*"))' >> "$tmp"
 
-trailers=$(sort -u "$tmp")
 mkdir -p .git/hooks
 cp -af devtools/commit-msg .git/hooks/commit-msg
 
 git log --pretty=fuller $(pr base.ref)..$(pr head.ref)
 
-git rebase $(pr base.ref) --exec \
-	'git log -1 --pretty="%B$trailers" | git commit --amend -F - --no-edit'
+TRAILERS=$(sort -u "$tmp") git rebase $(pr base.ref) --exec \
+	'git log -1 --pretty="%B$TRAILERS" | git commit --amend -F - --no-edit'
 
 git log --pretty=fuller $(pr base.ref)..$(pr head.ref)
 
