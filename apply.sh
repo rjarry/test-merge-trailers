@@ -3,9 +3,11 @@
 : ${PULL_REQUEST?PULL_REQUEST}
 : ${LOGIN?LOGIN}
 
+PR_JSON=$(gh api "$PULL_REQUEST")
+
 pr() {
 	local attr=$1
-	echo "$PULL_REQUEST" | jq -r ".$attr"
+	echo "$PR_JSON" | jq -r ".$attr"
 }
 
 job_url() {
