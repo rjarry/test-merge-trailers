@@ -15,13 +15,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # force fetch all history
-          persist-credentials: false
-
-      - uses: cli/gh-cli@v2
-
       - run: gh auth setup-git
 
       - name: Get PR details
@@ -68,6 +61,11 @@ jobs:
             --paginate --jq '.[].body | select(test("^(Acked-by|Tested-by):\\s*"))' >> $GITHUB_OUTPUT
           echo "$trailers" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # force fetch all history
+          persist-credentials: false
 
       - name: Fetch branches
         run: |
