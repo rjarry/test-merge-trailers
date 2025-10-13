@@ -101,8 +101,8 @@ gh api "repos/$GITHUB_REPOSITORY/issues/$(pr number)/comments" --paginate \
 
 git log --pretty=fuller $(pr base.ref)..$(pr head.ref)
 
-git rebase $(pr base.ref) --exec \
-	'git log -1 --pretty="adding trailers to %h %s" && git log -1 --pretty=%B > $tmp/msg && devtools/commit-msg $tmp/msg $tmp/trailers && git commit --amend -F $tmp/msg --no-edit'
+tmp="$tmp" git rebase $(pr base.ref) --exec \
+	"git log -1 --pretty='adding trailers to %h %s' && git log -1 --pretty=%B > $tmp/msg && devtools/commit-msg $tmp/msg $tmp/trailers && git commit --amend -F $tmp/msg --no-edit"
 
 git log --pretty=fuller $(pr base.ref)..$(pr head.ref)
 
