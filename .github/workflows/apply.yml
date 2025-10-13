@@ -1,0 +1,107 @@
+name: Apply
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  apply:
+    if: github.event.issue.pull_request != null && github.event.comment.body == '/apply'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # force fetch all history
+          persist-credentials: false
+
+      - uses: cli/gh-cli@v2
+
+      - run: gh auth setup-git
+
+      - name: Get PR details
+        run: |
+          set -xe
+          data=$(gh api ${{ github.event.issue.pull_request.url }})
+          echo "HEAD_REF=$(echo "$data" | jq -r '.head.ref')" >> $GITHUB_ENV
+          echo "BASE_REF=$(echo "$data" | jq -r '.base.ref')" >> $GITHUB_ENV
+
+      - name: Get commiter identity
+        run: |
+          set -xe
+          data=$(gh api users/${{ github.event.comment.user.login }})
+          name=$(echo "$data" | jq -r '.name')
+          ! [ "$name" = null ]
+          email=$(echo "$data" | jq -r '.email')
+          ! [ "$email" = null ]
+          echo "GIT_COMMITTER_NAME=$name" >> $GITHUB_ENV
+          echo "GIT_COMMITTER_EMAIL=$email" >> $GITHUB_ENV
+
+      - name: Gather approved reviews
+        id: reviews
+        run: |
+          set -xe -o pipefail
+          echo "data<<EOF" >> $GITHUB_OUTPUT
+          gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews \
+             --paginate --jq '.[] | select(.state=="APPROVED") ] .user.login' | sort -u |
+          while read -r login; do
+            data=$(gh api "users/$login")
+            name=$(echo "$data" | jq -r '.name')
+            ! [ "$name" = null ]
+            email=$(echo "$data" | jq -r '.email')
+            ! [ "$email" = null ]
+            echo "Reviewed-by: $name <$email>"
+          done | sort >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Extract Acked-by and Tested-by trailers from comments
+        id: trailers
+        run: |
+          set -xe -o pipefail
+          echo "data<<EOF" >> $GITHUB_OUTPUT
+          gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
+            --paginate --jq '.[].body | select(test("^(Acked-by|Tested-by):\\s*"))' >> $GITHUB_OUTPUT
+          echo "$trailers" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Fetch branches
+        run: |
+          git fetch origin $BASE_REF
+          git fetch origin $HEAD_REF
+
+      - name: Checkout base branch
+        run: |
+          git checkout $BASE_REF
+          git reset --hard origin/$BASE_REF
+
+      - name: Checkout PR branch
+        run: |
+          git checkout $HEAD_REF
+          git reset --hard origin/$HEAD_REF
+
+      - name: Rebase and add trailers
+        env:
+          REVIEWS: ${{ steps.reviews.outputs.data }}
+          TRAILERS: ${{ steps.trailers.outputs.data }}
+        run: |
+          set -xe -o pipefail
+          mkdir -p .git/hooks
+          cp -af devtools/commit-msg .git/hooks/commit-msg
+          git log $BASE_REF..$HEAD_REF
+          git rebase $BASE_REF --exec \
+            'git log -1 --pretty="%B$REVIEWS$TRAILERS" | git commit --amend -F - --no-edit'
+          git log $BASE_REF..$HEAD_REF
+
+      - name: Merge to base branch
+        run: |
+          git checkout $BASE_REF
+          git merge --ff-only $HEAD_REF
+          git push origin $BASE_REF
+
+      - name: Close PR
+        run: gh pr close ${{ github.event.issue.number }} --comment "Merged with trailers"
