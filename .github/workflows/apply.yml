@@ -41,7 +41,7 @@ jobs:
           set -xe -o pipefail
           echo "data<<EOF" >> $GITHUB_OUTPUT
           gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews \
-             --paginate --jq '.[] | select(.state=="APPROVED") ] .user.login' | sort -u |
+             --paginate --jq '.[] | select(.state=="APPROVED") | .user.login' | sort -u |
           while read -r login; do
             data=$(gh api "users/$login")
             name=$(echo "$data" | jq -r '.name')
