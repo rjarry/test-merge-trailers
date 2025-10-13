@@ -1,3 +1,3 @@
 # Bonjour
 
-ceci n'est pas un README.
+Ceci n'est pas un README.
