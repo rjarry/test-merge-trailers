@@ -1,17 +1,9 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2025 Robin Jarry
 
 : ${PULL_REQUEST?PULL_REQUEST}
 : ${LOGIN?LOGIN}
-
-PR_JSON=$(gh api "$PULL_REQUEST")
-
-pr() {
-	set +x
-	local attr=$1
-	val=$(echo "$PR_JSON" | jq -r ".$attr")
-	echo "$val"
-	set -x
-}
 
 job_url() {
 	set +x
@@ -23,17 +15,17 @@ job_url() {
 
 fail() {
 	set +e
-	gh pr comment $(pr number) -b "error: $*
+	gh pr comment $PR_NUMBER -b "error: $1
 
-$(job_url)"
+$JOB_URL"
 	exit 1
 }
 
 err() {
 	set +e
-	gh pr comment $(pr number) -b "error: command \`$BASH_COMMAND\` failed
+	gh pr comment $PR_NUMBER -b "error: command \`$BASH_COMMAND\` failed
 
-$(job_url)"
+$JOB_URL"
 	exit 1
 }
 
@@ -41,7 +33,7 @@ user_name() {
 	local login=$1
 	local name=$(gh api users/$login --jq '.name')
 	if [ -z "$name" ] || [ "$name" = null ]; then
-		fail "user $LOGIN does not expose their full name"
+		fail "user $login does not expose their full name"
 	fi
 	echo "$name"
 }
@@ -81,19 +73,26 @@ if ! [ "$perm" = admin ] && ! [ "$perm" = write ]; then
 	fail "user $LOGIN does not have permission to apply PRs (permission: $perm)"
 fi
 
+PR_JSON=$(gh api "$PULL_REQUEST")
+PR_NUMBER=$(echo "$PR_JSON" | jq -r .number)
+PR_BASE_REF=$(echo "$PR_JSON" | jq -r .base.ref)
+PR_HEAD_REF=$(echo "$PR_JSON" | jq -r .head.ref)
+PR_HEAD_URL=$(echo "$PR_JSON" | jq -r .head.repo.clone_url)
+JOB_URL=$(job_url)
+
 name=$(user_name "$LOGIN")
 email=$(user_email "$LOGIN" "$name")
 git config set user.name "$name"
 git config set user.email "$email"
 
-git remote add pr $(pr head.repo.clone_url)
-git fetch pr
-git checkout -t pr/$(pr head.ref)
+git remote add head "$PR_HEAD_URL"
+git fetch head
+git checkout -t "head/$PR_HEAD_REF"
 
 tmp=$(mktemp -d)
 trap "rm -rf -- $tmp" EXIT
 
-gh api "repos/$GITHUB_REPOSITORY/pulls/$(pr number)/reviews" --paginate \
+gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" --paginate \
 	--jq '.[] | select(.state=="APPROVED") | .user.login' | sort -u |
 while read -r login; do
 	name=$(user_name "$login")
@@ -101,23 +100,35 @@ while read -r login; do
 	echo "Reviewed-by: $name <$email>"
 done >> "$tmp/trailers"
 
-gh api "repos/$GITHUB_REPOSITORY/issues/$(pr number)/comments" --paginate \
-	--jq '.[].body | select(test("^(Acked-by|Tested-by|Reviewed-by|Reported-by):\\s*"))' >> "$tmp/trailers"
+trailer_re="(Reviewed|Acked|Tested)-by:[[:blank:]]+" # trailer key
+trailer_re="$trailer_re([[:alpha:]][^<]*[[:alpha:]])[[:blank:]]+" # full name
+trailer_re="$trailer_re<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>" # email
+gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq '.[].body' |
+	sed -En "s/^$trailer_re\$/\\1-by: \\2 <\\3>/p" | sort -u >> "$tmp/trailers"
 
-git log --pretty=fuller $(pr base.ref)..$(pr head.ref)
+git log --pretty=fuller "$PR_BASE_REF..$PR_HEAD_REF"
 
-tmp="$tmp" git rebase $(pr base.ref) --exec \
-	"git log -1 --pretty='adding trailers to %h %s' && git log -1 --pretty=%B > $tmp/msg && devtools/commit-msg $tmp/msg $tmp/trailers && git commit --amend -F $tmp/msg --no-edit"
+amend="git log -1 --pretty='adding trailers to %h %s'"
+amend="$amend && git log -1 --pretty=%B > $tmp/msg"
+amend="$amend && devtools/commit-msg $tmp/msg $tmp/trailers"
+amend="$amend && git commit --amend -F $tmp/msg --no-edit"
+if ! git rebase "$PR_BASE_REF" --exec "$amend" 2>&1 | tee "$tmp/rebase"; then
+	fail "rebase operation failed:
 
-git log --pretty=fuller $(pr base.ref)..$(pr head.ref)
+\`\`\`
+$(cat $tmp/rebase)
+\`\`\`"
+fi
 
-git checkout $(pr base.ref)
-git merge --ff-only $(pr head.ref)
-git push origin $(pr base.ref)
+git log --pretty=fuller "$PR_BASE_REF..$PR_HEAD_REF"
 
-gh pr comment $(pr number) -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)
+git checkout "$PR_BASE_REF"
+git merge --ff-only "$PR_HEAD_REF"
+git push origin "$PR_BASE_REF"
+
+gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)
 
 $(job_url)"
 
-gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$(pr number)/merge" \
-	-f merge_method=rebase || gh pr close $(pr number)
+gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
+	-f merge_method=rebase || gh pr close $PR_NUMBER

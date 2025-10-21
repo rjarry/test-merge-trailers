@@ -30,9 +30,10 @@ extra=$2
 tmp=$(mktemp -d)
 trap "rm -rf -- $tmp" EXIT
 
-echo dummy > "$tmp/extra"
+echo "git: dummy commit title" > "$tmp/extra"
 if [ -r "$extra" ]; then
 	echo
+	# add extra trailers after an empty line
 	sort -u "$extra"
 fi >> "$tmp/extra"
 
