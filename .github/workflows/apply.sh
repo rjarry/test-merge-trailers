@@ -114,7 +114,7 @@ done >> "$tmp/trailers"
 # gather all comments that contain Reviewed-by, Acked-by or Tested-by trailers
 trailer_re="(Reviewed|Acked|Tested)-by:[[:blank:]]+" # trailer key
 trailer_re="$trailer_re([[:alpha:]][^<]*[[:alpha:]])[[:blank:]]+" # full name
-trailer_re="$trailer_re<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>" # email
+trailer_re="$trailer_re<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>?" # email
 gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq '.[].body' |
 	sed -En "s/^$trailer_re\$/\\1-by: \\2 <\\3>/p" | sort -u >> "$tmp/trailers"
 
