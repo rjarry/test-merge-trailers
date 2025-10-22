@@ -4,8 +4,17 @@
 
 set -e -o pipefail
 
-: ${PULL_REQUEST?PULL_REQUEST}
-: ${LOGIN?LOGIN}
+# default variables exported by github actions
+: ${GITHUB_ACTOR?GITHUB_ACTOR}
+: ${GITHUB_BASE_REF?GITHUB_BASE_REF}
+: ${GITHUB_HEAD_REF?GITHUB_HEAD_REF}
+: ${GITHUB_JOB?GITHUB_JOB}
+: ${GITHUB_REPOSITORY?GITHUB_REPOSITORY}
+: ${GITHUB_RUN_ID?GITHUB_RUN_ID}
+# custom variables defined in apply.yml
+: ${CLONE_URL?CLONE_URL}
+: ${GR_TOKEN?GH_TOKEN}
+: ${PR_NUMBER?PR_NUMBER}
 
 # get the full URL pointing to the current github action job
 job_url() {
@@ -70,29 +79,17 @@ user_email() {
 
 trap err ERR
 
-# gather pull request details
-PR_JSON=$(gh api "$PULL_REQUEST")
-PR_NUMBER=$(echo "$PR_JSON" | jq -r .number)
-BASE_REF=$(echo "$PR_JSON" | jq -r .base.ref)
-HEAD_REF=$(echo "$PR_JSON" | jq -r .head.ref)
-NUM_COMMITS=$(echo "$PR_JSON" | jq -r .commits)
-HEAD_URL=$(echo "$PR_JSON" | jq -r .head.repo.clone_url)
 JOB_URL=$(job_url)
+
 tmp=$(mktemp -d)
 trap "rm -rf -- $tmp" EXIT
 
 set -x
 
-# ensure that the person that posted the '/apply' comment has push access
-perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$LOGIN/permission" --jq '.permission')
-if ! [ "$perm" = admin ] && ! [ "$perm" = write ]; then
-	fail "user $LOGIN does not have permission to apply PRs (permission: $perm)"
-fi
-
 # configure git identity to the person that posted the '/apply' comment
 # they will be "committer" of all the rebased commits
-GIT_COMMITTER_NAME=$(user_name "$LOGIN")
-GIT_COMMITTER_EMAIL=$(user_email "$LOGIN" "$GIT_COMMITTER_NAME")
+GIT_COMMITTER_NAME=$(user_name "$GITHUB_ACTOR")
+GIT_COMMITTER_EMAIL=$(user_email "$GITHUB_ACTOR" "$GIT_COMMITTER_NAME")
 git config set user.name "$GIT_COMMITTER_NAME"
 git config set user.email "$GIT_COMMITTER_EMAIL"
 export GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
@@ -101,13 +98,13 @@ ln -s ../../devtools/commit-msg .git/hooks/commit-msg
 
 base_sha=$(git log -1 --pretty=%H HEAD)
 
-git remote add head "$HEAD_URL"
+git remote add head "$CLONE_URL"
 git fetch head
-git checkout -b "$HEAD_REF" "head/$HEAD_REF"
-git branch --set-upstream-to="origin/$BASE_REF"
+git checkout -b "$GITHUB_HEAD_REF" "head/$GITHUB_HEAD_REF"
+git branch --set-upstream-to="origin/$GITHUB_BASE_REF"
 
 # fast forward merge the pull request branch on top of the base one
-if ! git rebase "origin/$BASE_REF" >"$tmp/rebase" 2>&1; then
+if ! git rebase "origin/$GITHUB_BASE_REF" >"$tmp/rebase" 2>&1; then
 	fail "rebase failed:
 \`\`\`
 $(cat $tmp/rebase)
@@ -146,23 +143,22 @@ done < "$tmp/trailers-uniq"
 if [ -n "$trailers" ]; then
 	# rewrite all commit messages, appending trailers
 	# hooks/commit-msg will remove duplicates and ensure correct ordering
-	GIT_TRAILER_DEBUG=1 git rebase "origin/$BASE_REF" \
+	GIT_TRAILER_DEBUG=1 git rebase "origin/$GITHUB_BASE_REF" \
 		--exec "git commit -C HEAD --no-edit --amend $trailers"
-	git log --pretty=fuller "origin/$BASE_REF.."
+	git log --pretty=fuller "origin/$GITHUB_BASE_REF.."
 fi
 
 # fast-forward merge the rebased branch with added trailers and push it manually
-git checkout "$BASE_REF"
-git merge --ff-only "$HEAD_REF"
-git push origin "$BASE_REF"
+git checkout "$GITHUB_BASE_REF"
+git merge --ff-only "$GITHUB_HEAD_REF"
+git push origin "$GITHUB_BASE_REF"
 
 # post a comment to identify the new HEAD commit id
-sha=$(git log -1 --pretty=%H "origin/$BASE_REF")
+sha=$(git log -1 --pretty=%H "origin/$GITHUB_BASE_REF")
 gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers: $sha
 
-$(job_url)"
+$JOB_URL"
 
 # 'gh pr merge --rebase' will do nothing since the branch was already pushed
 # bypass the check and invoke the API endpoint directly
-gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
-	-f merge_method=rebase || gh pr close $PR_NUMBER
+gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" -f merge_method=rebase
