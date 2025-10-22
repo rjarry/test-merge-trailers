@@ -8,45 +8,25 @@ set -e -o pipefail
 : ${GITHUB_ACTOR?GITHUB_ACTOR}
 : ${GITHUB_BASE_REF?GITHUB_BASE_REF}
 : ${GITHUB_HEAD_REF?GITHUB_HEAD_REF}
-: ${GITHUB_JOB?GITHUB_JOB}
 : ${GITHUB_REPOSITORY?GITHUB_REPOSITORY}
-: ${GITHUB_RUN_ID?GITHUB_RUN_ID}
 # custom variables defined in apply.yml
 : ${CLONE_URL?CLONE_URL}
 : ${GH_TOKEN?GH_TOKEN}
 : ${PR_NUMBER?PR_NUMBER}
 
-# get the full URL pointing to the current github action job
-job_url() {
-	local run_id="$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-	local job_id=$(gh api "repos/$run_id/jobs" --jq ".jobs[] | select(.name==\"$GITHUB_JOB\") | .id")
-	echo "https://github.com/$run_id/job/$job_id"
-}
-
 # post an error message on the pull request
-fail() {
+die() {
 	set +e
-	gh pr comment $PR_NUMBER -b "error: $1
-
-$JOB_URL"
-	exit 1
-}
-
-# error trap handler
-err() {
-	set +e
-	gh pr comment $PR_NUMBER -b "error: command \`$BASH_COMMAND\` failed
-
-$JOB_URL"
-	exit 1
+	echo "error: $*" >&2
+	return 1
 }
 
 # get the full name of the given github account (may not be available)
 user_name() {
-	local login=$1
-	local name=$(gh api users/$login --jq '.name')
+	local login=$1 name
+	name=$(gh api users/$login --jq '.name')
 	if [ -z "$name" ] || [ "$name" = null ]; then
-		fail "user $login does not expose their full name"
+		die "user $login does not expose their full name"
 	fi
 	echo "$name"
 }
@@ -65,21 +45,18 @@ email_from_git() {
 
 # get the email from a github account (fallback to looking at github history)
 user_email() {
-	local login=$1
-	local name=$2
-	local email=$(email_from_gh "$login")
+	local login=$1 name=$2 email
+	email=$(email_from_gh "$login")
 	if [ -z "$email" ] || [ "$email" = null ]; then
 		email=$(email_from_git "$name")
 		if [ -z "$email" ]; then
-			fail "user $login does not expose their email and is unknown from git history"
+			die "user $login does not expose their email and is unknown from git history"
 		fi
 	fi
 	echo "$email"
 }
 
 trap err ERR
-
-JOB_URL=$(job_url)
 
 tmp=$(mktemp -d)
 trap "rm -rf -- $tmp" EXIT
@@ -105,17 +82,12 @@ git checkout -b "$GITHUB_HEAD_REF" "head/$GITHUB_HEAD_REF"
 git branch --set-upstream-to="origin/$GITHUB_BASE_REF"
 
 # fast forward merge the pull request branch on top of the base one
-if ! git rebase "origin/$GITHUB_BASE_REF" >"$tmp/rebase" 2>&1; then
-	fail "rebase failed:
-\`\`\`
-$(cat $tmp/rebase)
-\`\`\`"
-fi
+git rebase "origin/$GITHUB_BASE_REF"
 
 # ensure at least one commit was applied
 rebased_sha=$(git log -1 --pretty=%H HEAD)
 if [ "$rebased_sha" = "$base_sha" ]; then
-	fail "branch commits already merged"
+	die "branch commits already merged"
 fi
 
 # add a Reviewed-by trailer for every "approved" review
@@ -153,12 +125,6 @@ fi
 git checkout "$GITHUB_BASE_REF"
 git merge --ff-only "$GITHUB_HEAD_REF"
 git push origin "$GITHUB_BASE_REF"
-
-# post a comment to identify the new HEAD commit id
-sha=$(git log -1 --pretty=%H "origin/$GITHUB_BASE_REF")
-gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers: $sha
-
-$JOB_URL"
 
 # 'gh pr merge --rebase' will do nothing since the branch was already pushed
 # bypass the check and invoke the API endpoint directly
