@@ -131,4 +131,4 @@ gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers."
 # 'gh pr merge --rebase' will do nothing since the branch was already pushed
 # bypass the check and invoke the API endpoint directly
 gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
-	-f merge_method=rebase || gh pr close
+	-f merge_method=rebase || gh pr close $PR_NUMBER
