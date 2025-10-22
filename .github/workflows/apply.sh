@@ -2,16 +2,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Robin Jarry
 
+set -Ee -o pipefail
+
 : ${PULL_REQUEST?PULL_REQUEST}
 : ${LOGIN?LOGIN}
 
 # get the full URL pointing to the current github action job
 job_url() {
-	set +x
 	local run_id="$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 	local job_id=$(gh api "repos/$run_id/jobs" --jq ".jobs[] | select(.name==\"$GITHUB_JOB\") | .id")
 	echo "https://github.com/$run_id/job/$job_id"
-	set -x
 }
 
 # post an error message on the pull request
@@ -68,14 +68,7 @@ user_email() {
 	echo "$email"
 }
 
-set -xEe -o pipefail
 trap err ERR
-
-# ensure that the person that posted the '/apply' comment has push access
-perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$LOGIN/permission" --jq '.permission')
-if ! [ "$perm" = admin ] && ! [ "$perm" = write ]; then
-	fail "user $LOGIN does not have permission to apply PRs (permission: $perm)"
-fi
 
 # gather pull request details
 PR_JSON=$(gh api "$PULL_REQUEST")
@@ -85,6 +78,14 @@ PR_HEAD_REF=$(echo "$PR_JSON" | jq -r .head.ref)
 PR_NUM_COMMITS=$(echo "$PR_JSON" | jq -r .commits)
 PR_HEAD_URL=$(echo "$PR_JSON" | jq -r .head.repo.clone_url)
 JOB_URL=$(job_url)
+
+set -x
+
+# ensure that the person that posted the '/apply' comment has push access
+perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$LOGIN/permission" --jq '.permission')
+if ! [ "$perm" = admin ] && ! [ "$perm" = write ]; then
+	fail "user $LOGIN does not have permission to apply PRs (permission: $perm)"
+fi
 
 # configure git identity to the person that posted the '/apply' comment
 # they will be "committer" of all the rebased commits
@@ -98,7 +99,21 @@ ln -s ../../devtools/commit-msg .git/hooks/commit-msg
 
 git remote add head "$PR_HEAD_URL"
 git fetch head
-git checkout -b "$PR_HEAD_REF" "head/$PR_HEAD_REF"
+
+# fast forward merge the pull request branch on top of the base one
+base_sha=$(git log -1 --pretty=%H HEAD)
+if ! git merge --ff-only "head/$PR_HEAD_REF" >"$tmp/merge" 2>&1; then
+	fail "fast forward merge failed:
+\`\`\`
+$(cat $tmp/merge)
+\`\`\`"
+fi
+
+# ensure at least one commit was applied
+rebased_sha=$(git log -1 --pretty=%H HEAD)
+if [ "$rebased_sha" = "$base_sha" ]; then
+	fail "branch commits already merged"
+fi
 
 tmp=$(mktemp -d)
 trap "rm -rf -- $tmp" EXIT
@@ -119,30 +134,20 @@ trailer_re="$trailer_re<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>?[[:s
 gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq '.[].body' |
 	sed -En "s/^$trailer_re\$/\\1-by: \\2 <\\3>/p" | sort -u >> "$tmp/trailers"
 
-git log --pretty=fuller "$PR_HEAD_REF~$PR_NUM_COMMITS.."
-
 trailers=""
 while read -r line; do
 	trailers="$trailers --trailer '$line'"
 done < "$tmp/trailers"
 
 # rebase all commits of the pull request on top of the latest "main" branch
-# use devtools/commit-msg to append extra trailers and enforce their ordering
-amend="git commit -C HEAD --no-edit --amend $trailers"
-export GIT_TRAILER_DEBUG=1
-if ! git rebase --exec "$amend" --onto "origin/$PR_BASE_REF" "origin/$PR_BASE_REF" >"$tmp/rebase" 2>&1; then
-	fail "rebase operation failed:
+# .git/hooks/commit-msg will remove duplicate trailers
+GIT_TRAILER_DEBUG=1 git rebase \
+	--exec "git commit -C HEAD --no-edit --amend $trailers" \
+	"HEAD~$PR_NUM_COMMITS.."
 
-\`\`\`
-$(cat $tmp/rebase)
-\`\`\`"
-fi
-
-git log --pretty=fuller "$PR_BASE_REF..$PR_HEAD_REF"
+git log --pretty=fuller "HEAD~$PR_NUM_COMMITS.."
 
 # fast-forward merge the rebased branch with added trailers and push it manually
-git checkout "$PR_BASE_REF"
-git merge --ff-only "$PR_HEAD_REF"
 git push origin "$PR_BASE_REF"
 
 # 'gh pr merge --rebase' will do nothing since the branch was already pushed
@@ -151,6 +156,7 @@ gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
 	-f merge_method=rebase || gh pr close $PR_NUMBER
 
 # post a comment to identify the new HEAD commit id
-gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)
+sha=$(git log -1 --pretty=%H "origin/$PR_BASE_REF")
+gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers: $sha
 
 $(job_url)"
