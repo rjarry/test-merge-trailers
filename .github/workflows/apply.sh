@@ -78,6 +78,8 @@ PR_HEAD_REF=$(echo "$PR_JSON" | jq -r .head.ref)
 PR_NUM_COMMITS=$(echo "$PR_JSON" | jq -r .commits)
 PR_HEAD_URL=$(echo "$PR_JSON" | jq -r .head.repo.clone_url)
 JOB_URL=$(job_url)
+tmp=$(mktemp -d)
+trap "rm -rf -- $tmp" EXIT
 
 set -x
 
@@ -114,9 +116,6 @@ rebased_sha=$(git log -1 --pretty=%H HEAD)
 if [ "$rebased_sha" = "$base_sha" ]; then
 	fail "branch commits already merged"
 fi
-
-tmp=$(mktemp -d)
-trap "rm -rf -- $tmp" EXIT
 
 # add a Reviewed-by trailer for every "approved" review
 gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" --paginate \
