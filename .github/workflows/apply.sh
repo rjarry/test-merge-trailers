@@ -92,7 +92,7 @@ fi
 # configure git identity to the person that posted the '/apply' comment
 # they will be "committer" of all the rebased commits
 GIT_COMMITTER_NAME=$(user_name "$LOGIN")
-GIT_COMMITTER_EMAIL=$(user_email "$LOGIN" "$name")
+GIT_COMMITTER_EMAIL=$(user_email "$LOGIN" "$GIT_COMMITTER_NAME")
 git config set user.name "$GIT_COMMITTER_NAME"
 git config set user.email "$GIT_COMMITTER_EMAIL"
 export GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
