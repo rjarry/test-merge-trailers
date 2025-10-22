@@ -146,10 +146,9 @@ done < "$tmp/trailers-uniq"
 if [ -n "$trailers" ]; then
 	# rewrite all commit messages, appending trailers
 	# hooks/commit-msg will remove duplicates and ensure correct ordering
-	GIT_TRAILER_DEBUG=1 git rebase \
-		--exec "git commit -C HEAD --no-edit --amend $trailers" \
-		"HEAD~$NUM_COMMITS.."
-	git log --pretty=fuller "HEAD~$NUM_COMMITS.."
+	GIT_TRAILER_DEBUG=1 git rebase "origin/$BASE_REF" \
+		--exec "git commit -C HEAD --no-edit --amend $trailers"
+	git log --pretty=fuller "origin/$BASE_REF.."
 fi
 
 # fast-forward merge the rebased branch with added trailers and push it manually
