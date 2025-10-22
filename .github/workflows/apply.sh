@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Robin Jarry
 
-set -Ee -o pipefail
+set -e -o pipefail
 
 : ${PULL_REQUEST?PULL_REQUEST}
 : ${LOGIN?LOGIN}
