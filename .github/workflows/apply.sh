@@ -128,7 +128,7 @@ done < "$tmp/trailers"
 # rebase all commits of the pull request on top of the latest "main" branch
 # use devtools/commit-msg to append extra trailers and enforce their ordering
 amend="git commit -C HEAD --no-edit --amend $trailers"
-if ! git rebase "origin/$PR_BASE_REF" --exec "$amend" >"$tmp/rebase" 2>&1; then
+if ! git rebase --exec "$amend" --onto "origin/$PR_BASE_REF" >"$tmp/rebase" 2>&1; then
 	fail "rebase operation failed:
 
 \`\`\`
