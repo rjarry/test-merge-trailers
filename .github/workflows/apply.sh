@@ -104,9 +104,10 @@ base_sha=$(git log -1 --pretty=%H HEAD)
 git remote add head "$HEAD_URL"
 git fetch head
 git checkout -b "$HEAD_REF" "head/$HEAD_REF"
+git branch --set-upstream-to="origin/$BASE_REF"
 
 # fast forward merge the pull request branch on top of the base one
-if ! git rebase "$BASE_REF" "head/$HEAD_REF" >"$tmp/rebase" 2>&1; then
+if ! git rebase "base/$BASE_REF" >"$tmp/rebase" 2>&1; then
 	fail "rebase failed:
 \`\`\`
 $(cat $tmp/rebase)
