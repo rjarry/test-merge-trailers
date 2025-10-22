@@ -92,6 +92,8 @@ name=$(user_name "$LOGIN")
 email=$(user_email "$LOGIN" "$name")
 git config set user.name "$name"
 git config set user.email "$email"
+rm -f .git/hooks/commit-msg
+ln -s ../../devtools/commit-msg .git/hooks/commit-msg
 
 git remote add head "$PR_HEAD_URL"
 git fetch head
@@ -116,15 +118,17 @@ trailer_re="$trailer_re<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>" # em
 gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq '.[].body' |
 	sed -En "s/^$trailer_re\$/\\1-by: \\2 <\\3>/p" | sort -u >> "$tmp/trailers"
 
-git log --pretty=fuller "HEAD~$PR_NUM_COMMITS.."
+git log --pretty=fuller "$PR_HEAD_REF~$PR_NUM_COMMITS.."
+
+trailers=""
+while read -r line; do
+	trailers="$trailers --trailer '$line'"
+done < "$tmp/trailers"
 
 # rebase all commits of the pull request on top of the latest "main" branch
 # use devtools/commit-msg to append extra trailers and enforce their ordering
-amend="git log -1 --pretty='adding trailers to %h %s'"
-amend="$amend && git log -1 --pretty=%B > $tmp/msg"
-amend="$amend && devtools/commit-msg $tmp/msg $tmp/trailers"
-amend="$amend && git commit --amend -F $tmp/msg --no-edit"
-if ! git rebase "$PR_BASE_REF" --exec "$amend" 2>&1 | tee "$tmp/rebase"; then
+amend="git commit -C HEAD --no-edit --amend $trailers"
+if ! git rebase "origin/$PR_BASE_REF" --exec "$amend" >"$tmp/rebase" 2>&1; then
 	fail "rebase operation failed:
 
 \`\`\`

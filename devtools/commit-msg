@@ -26,19 +26,11 @@ Reviewed-by:
 Acked-by:
 "
 file=${1?file}
-extra=$2
-tmp=$(mktemp -d)
-trap "rm -rf -- $tmp" EXIT
-
-echo "git: dummy commit title" > "$tmp/extra"
-if [ -r "$extra" ]; then
-	echo
-	# add extra trailers after an empty line
-	sort -u "$extra"
-fi >> "$tmp/extra"
+tmp=$(mktemp)
+trap "rm -f $tmp" EXIT
 
 # Read unfolded trailers and normalize case.
-git interpret-trailers --parse --trim-empty "$file" "$tmp/extra" |
+git interpret-trailers --parse --trim-empty "$file" |
 while read -r key value; do
 	# Force title case on trailer key.
 	first_letter=$(echo "$key" | sed 's/^\(.\).*/\1/' | tr '[:lower:]' '[:upper:]')
@@ -56,10 +48,10 @@ while read -r key value; do
 	echo "$order $key $value"
 done |
 # Sort trailers according to their numeric order, trim the numeric order.
-LC_ALL=C sort -n | sed -E 's/^[0-9]+ //' > "$tmp/trailers"
+LC_ALL=C sort -n | sed -E 's/^[0-9]+ //' > "$tmp"
 
 debug echo ==== sanitized trailers ====
-debug cat "$tmp/trailers"
+debug cat "$tmp"
 
 # Unfortunately, reordering trailers is not possible at the moment. Delete all
 # trailers first. The only way to do it is to force replace existing trailers
@@ -68,12 +60,12 @@ while read -r key value; do
 	git interpret-trailers --in-place --if-exists=replace \
 		--trailer="$key " "$file"
 	git interpret-trailers --in-place --trim-empty "$file"
-done < "$tmp/trailers"
+done < "$tmp"
 
 set --
 while read -r trailer; do
 	set -- "$@" --trailer="$trailer"
-done < "$tmp/trailers"
+done < "$tmp"
 
 # Remove duplicate "key: value" trailers (e.g. duplicate signed-off-by).
 git interpret-trailers --in-place --if-exists=addIfDifferent "$@" "$file"
