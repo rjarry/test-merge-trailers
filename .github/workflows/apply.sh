@@ -13,7 +13,7 @@ set -e -o pipefail
 : ${GITHUB_RUN_ID?GITHUB_RUN_ID}
 # custom variables defined in apply.yml
 : ${CLONE_URL?CLONE_URL}
-: ${GR_TOKEN?GH_TOKEN}
+: ${GH_TOKEN?GH_TOKEN}
 : ${PR_NUMBER?PR_NUMBER}
 
 # get the full URL pointing to the current github action job
@@ -98,6 +98,7 @@ ln -s ../../devtools/commit-msg .git/hooks/commit-msg
 
 base_sha=$(git log -1 --pretty=%H HEAD)
 
+gh auth setup-git
 git remote add head "$CLONE_URL"
 git fetch head
 git checkout -b "$GITHUB_HEAD_REF" "head/$GITHUB_HEAD_REF"
