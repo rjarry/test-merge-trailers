@@ -88,10 +88,11 @@ JOB_URL=$(job_url)
 
 # configure git identity to the person that posted the '/apply' comment
 # they will be "committer" of all the rebased commits
-name=$(user_name "$LOGIN")
-email=$(user_email "$LOGIN" "$name")
-git config set user.name "$name"
-git config set user.email "$email"
+GIT_COMMITTER_NAME=$(user_name "$LOGIN")
+GIT_COMMITTER_EMAIL=$(user_email "$LOGIN" "$name")
+git config set user.name "$GIT_COMMITTER_NAME"
+git config set user.email "$GIT_COMMITTER_EMAIL"
+export GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 rm -f .git/hooks/commit-msg
 ln -s ../../devtools/commit-msg .git/hooks/commit-msg
 
@@ -112,9 +113,9 @@ while read -r login; do
 done >> "$tmp/trailers"
 
 # gather all comments that contain Reviewed-by, Acked-by or Tested-by trailers
-trailer_re="(Reviewed|Acked|Tested)-by:[[:blank:]]+" # trailer key
+trailer_re="[[:space:]]*(Reviewed|Acked|Tested)-by:[[:blank:]]+" # trailer key
 trailer_re="$trailer_re([[:alpha:]][^<]*[[:alpha:]])[[:blank:]]+" # full name
-trailer_re="$trailer_re<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>?" # email
+trailer_re="$trailer_re<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>?[[:space:]]*" # email
 gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq '.[].body' |
 	sed -En "s/^$trailer_re\$/\\1-by: \\2 <\\3>/p" | sort -u >> "$tmp/trailers"
 
@@ -128,7 +129,8 @@ done < "$tmp/trailers"
 # rebase all commits of the pull request on top of the latest "main" branch
 # use devtools/commit-msg to append extra trailers and enforce their ordering
 amend="git commit -C HEAD --no-edit --amend $trailers"
-if ! git rebase --exec "$amend" --onto "origin/$PR_BASE_REF" >"$tmp/rebase" 2>&1; then
+export GIT_TRAILER_DEBUG=1
+if ! git rebase --exec "$amend" --onto "origin/$PR_BASE_REF" "origin/$PR_BASE_REF" >"$tmp/rebase" 2>&1; then
 	fail "rebase operation failed:
 
 \`\`\`
