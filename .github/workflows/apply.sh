@@ -73,10 +73,10 @@ trap err ERR
 # gather pull request details
 PR_JSON=$(gh api "$PULL_REQUEST")
 PR_NUMBER=$(echo "$PR_JSON" | jq -r .number)
-PR_BASE_REF=$(echo "$PR_JSON" | jq -r .base.ref)
-PR_HEAD_REF=$(echo "$PR_JSON" | jq -r .head.ref)
-PR_NUM_COMMITS=$(echo "$PR_JSON" | jq -r .commits)
-PR_HEAD_URL=$(echo "$PR_JSON" | jq -r .head.repo.clone_url)
+BASE_REF=$(echo "$PR_JSON" | jq -r .base.ref)
+HEAD_REF=$(echo "$PR_JSON" | jq -r .head.ref)
+NUM_COMMITS=$(echo "$PR_JSON" | jq -r .commits)
+HEAD_URL=$(echo "$PR_JSON" | jq -r .head.repo.clone_url)
 JOB_URL=$(job_url)
 tmp=$(mktemp -d)
 trap "rm -rf -- $tmp" EXIT
@@ -99,13 +99,15 @@ export GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 rm -f .git/hooks/commit-msg
 ln -s ../../devtools/commit-msg .git/hooks/commit-msg
 
-git remote add head "$PR_HEAD_URL"
+base_sha=$(git log -1 --pretty=%H HEAD)
+
+git remote add head "$HEAD_URL"
 git fetch head
+git checkout -b "$HEAD_REF" "head/$HEAD_REF"
 
 # fast forward merge the pull request branch on top of the base one
-base_sha=$(git log -1 --pretty=%H HEAD)
-if ! git merge --ff-only "head/$PR_HEAD_REF" >"$tmp/merge" 2>&1; then
-	fail "fast forward merge failed:
+if ! git rebase "$BASE_REF" "head/$HEAD_REF" >"$tmp/rebase" 2>&1; then
+	fail "rebase failed:
 \`\`\`
 $(cat $tmp/merge)
 \`\`\`"
@@ -133,21 +135,26 @@ trailer_re="$trailer_re<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>?[[:s
 gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq '.[].body' |
 	sed -En "s/^$trailer_re\$/\\1-by: \\2 <\\3>/p" | sort -u >> "$tmp/trailers"
 
+sort -u "$tmp/trailers" > "$tmp/trailers-uniq"
+
 trailers=""
 while read -r line; do
 	trailers="$trailers --trailer '$line'"
-done < "$tmp/trailers"
+done < "$tmp/trailers-uniq"
 
-# rebase all commits of the pull request on top of the latest "main" branch
-# .git/hooks/commit-msg will remove duplicate trailers
-GIT_TRAILER_DEBUG=1 git rebase \
-	--exec "git commit -C HEAD --no-edit --amend $trailers" \
-	"HEAD~$PR_NUM_COMMITS.."
-
-git log --pretty=fuller "HEAD~$PR_NUM_COMMITS.."
+if [ -n "$trailers" ]; then
+	# rewrite all commit messages, appending trailers
+	# hooks/commit-msg will remove duplicates and ensure correct ordering
+	GIT_TRAILER_DEBUG=1 git rebase \
+		--exec "git commit -C HEAD --no-edit --amend $trailers" \
+		"HEAD~$NUM_COMMITS.."
+	git log --pretty=fuller "HEAD~$NUM_COMMITS.."
+fi
 
 # fast-forward merge the rebased branch with added trailers and push it manually
-git push origin "$PR_BASE_REF"
+git checkout "$BASE_REF"
+git merge --ff-only "$HEAD_REF"
+git push origin "$BASE_REF"
 
 # 'gh pr merge --rebase' will do nothing since the branch was already pushed
 # bypass the check and invoke the API endpoint directly
@@ -155,7 +162,7 @@ gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
 	-f merge_method=rebase || gh pr close $PR_NUMBER
 
 # post a comment to identify the new HEAD commit id
-sha=$(git log -1 --pretty=%H "origin/$PR_BASE_REF")
+sha=$(git log -1 --pretty=%H "origin/$BASE_REF")
 gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers: $sha
 
 $(job_url)"
