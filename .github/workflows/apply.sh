@@ -156,13 +156,13 @@ git checkout "$BASE_REF"
 git merge --ff-only "$HEAD_REF"
 git push origin "$BASE_REF"
 
-# 'gh pr merge --rebase' will do nothing since the branch was already pushed
-# bypass the check and invoke the API endpoint directly
-gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
-	-f merge_method=rebase || gh pr close $PR_NUMBER
-
 # post a comment to identify the new HEAD commit id
 sha=$(git log -1 --pretty=%H "origin/$BASE_REF")
 gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers: $sha
 
 $(job_url)"
+
+# 'gh pr merge --rebase' will do nothing since the branch was already pushed
+# bypass the check and invoke the API endpoint directly
+gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
+	-f merge_method=rebase || gh pr close $PR_NUMBER
