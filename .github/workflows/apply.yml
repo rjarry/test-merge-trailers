@@ -42,16 +42,27 @@ jobs:
                 body: `@${actor}, you are not allowed to add the ${label} label. It has been removed. Only users with write/admin can trigger this workflow.`
               });
               core.setFailed(`@${actor} does not have permissions to trigger this workflow`);
+              process.exit(1);
             }
 
       - uses: actions/checkout@v4
+        if: success()
         with:
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
 
+      - name: Generate grout-bot app token
+        if: success()
+        uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
       - run: .github/workflows/apply.sh
+        if: success()
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           CLONE_URL: ${{ github.event.pull_request.head.repo.clone_url }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
