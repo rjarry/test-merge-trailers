@@ -109,7 +109,7 @@ git checkout -b "$HEAD_REF" "head/$HEAD_REF"
 if ! git rebase "$BASE_REF" "head/$HEAD_REF" >"$tmp/rebase" 2>&1; then
 	fail "rebase failed:
 \`\`\`
-$(cat $tmp/merge)
+$(cat $tmp/rebase)
 \`\`\`"
 fi
 
