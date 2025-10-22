@@ -4,7 +4,7 @@ Ceci n'est pas un README.
 
 Et pourtant ça en a l'air.
 
-Fork you GH!
+Fork you GH! Quelle grossièreté.
 
 # Copyright
 
