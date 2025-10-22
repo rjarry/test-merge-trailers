@@ -5,6 +5,7 @@
 : ${PULL_REQUEST?PULL_REQUEST}
 : ${LOGIN?LOGIN}
 
+# get the full URL pointing to the current github action job
 job_url() {
 	set +x
 	local run_id="$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
@@ -13,6 +14,7 @@ job_url() {
 	set -x
 }
 
+# post an error message on the pull request
 fail() {
 	set +e
 	gh pr comment $PR_NUMBER -b "error: $1
@@ -21,6 +23,7 @@ $JOB_URL"
 	exit 1
 }
 
+# error trap handler
 err() {
 	set +e
 	gh pr comment $PR_NUMBER -b "error: command \`$BASH_COMMAND\` failed
@@ -29,6 +32,7 @@ $JOB_URL"
 	exit 1
 }
 
+# get the full name of the given github account (may not be available)
 user_name() {
 	local login=$1
 	local name=$(gh api users/$login --jq '.name')
@@ -38,20 +42,19 @@ user_name() {
 	echo "$name"
 }
 
+# get the email exposed by the given github account (may not be available)
 email_from_gh() {
 	local login=$1
 	gh api users/$login --jq '.email'
 }
 
+# get the most recent email used by that person from git history
 email_from_git() {
 	local name=$1
-	git shortlog -se -w0 --group=author --group=committer \
-		--group=trailer:acked-by --group=trailer:reviewed-by \
-		--group=trailer:reported-by --group=trailer:signed-off-by \
-		--group=trailer:tested-by HEAD |
-	sed -En "s/^[[:space:]]+[0-9]+[[:space:]]+$name <([^@]+@[^>]+)>$/\\1/p"
+	git log --pretty=%aE --author="$name" | head -n1
 }
 
+# get the email from a github account (fallback to looking at github history)
 user_email() {
 	local login=$1
 	local name=$2
@@ -68,18 +71,23 @@ user_email() {
 set -xEe -o pipefail
 trap err ERR
 
+# ensure that the person that posted the '/apply' comment has push access
 perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$LOGIN/permission" --jq '.permission')
 if ! [ "$perm" = admin ] && ! [ "$perm" = write ]; then
 	fail "user $LOGIN does not have permission to apply PRs (permission: $perm)"
 fi
 
+# gather pull request details
 PR_JSON=$(gh api "$PULL_REQUEST")
 PR_NUMBER=$(echo "$PR_JSON" | jq -r .number)
 PR_BASE_REF=$(echo "$PR_JSON" | jq -r .base.ref)
 PR_HEAD_REF=$(echo "$PR_JSON" | jq -r .head.ref)
+PR_NUM_COMMITS=$(echo "$PR_JSON" | jq -r .commits)
 PR_HEAD_URL=$(echo "$PR_JSON" | jq -r .head.repo.clone_url)
 JOB_URL=$(job_url)
 
+# configure git identity to the person that posted the '/apply' comment
+# they will be "committer" of all the rebased commits
 name=$(user_name "$LOGIN")
 email=$(user_email "$LOGIN" "$name")
 git config set user.name "$name"
@@ -87,11 +95,12 @@ git config set user.email "$email"
 
 git remote add head "$PR_HEAD_URL"
 git fetch head
-git checkout -t "head/$PR_HEAD_REF"
+git checkout -b "$PR_HEAD_REF" "head/$PR_HEAD_REF"
 
 tmp=$(mktemp -d)
 trap "rm -rf -- $tmp" EXIT
 
+# add a Reviewed-by trailer for every "approved" review
 gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" --paginate \
 	--jq '.[] | select(.state=="APPROVED") | .user.login' | sort -u |
 while read -r login; do
@@ -100,14 +109,17 @@ while read -r login; do
 	echo "Reviewed-by: $name <$email>"
 done >> "$tmp/trailers"
 
+# gather all comments that contain Reviewed-by, Acked-by or Tested-by trailers
 trailer_re="(Reviewed|Acked|Tested)-by:[[:blank:]]+" # trailer key
 trailer_re="$trailer_re([[:alpha:]][^<]*[[:alpha:]])[[:blank:]]+" # full name
 trailer_re="$trailer_re<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>" # email
 gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq '.[].body' |
 	sed -En "s/^$trailer_re\$/\\1-by: \\2 <\\3>/p" | sort -u >> "$tmp/trailers"
 
-git log --pretty=fuller "$PR_BASE_REF..$PR_HEAD_REF"
+git log --pretty=fuller "HEAD~$PR_NUM_COMMITS.."
 
+# rebase all commits of the pull request on top of the latest "main" branch
+# use devtools/commit-msg to append extra trailers and enforce their ordering
 amend="git log -1 --pretty='adding trailers to %h %s'"
 amend="$amend && git log -1 --pretty=%B > $tmp/msg"
 amend="$amend && devtools/commit-msg $tmp/msg $tmp/trailers"
@@ -122,13 +134,17 @@ fi
 
 git log --pretty=fuller "$PR_BASE_REF..$PR_HEAD_REF"
 
+# fast-forward merge the rebased branch with added trailers and push it manually
 git checkout "$PR_BASE_REF"
 git merge --ff-only "$PR_HEAD_REF"
 git push origin "$PR_BASE_REF"
 
+# 'gh pr merge --rebase' will do nothing since the branch was already pushed
+# bypass the check and invoke the API endpoint directly
+gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
+	-f merge_method=rebase || gh pr close $PR_NUMBER
+
+# post a comment to identify the new HEAD commit id
 gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers: $(git log -1 --pretty=%H)
 
 $(job_url)"
-
-gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
-	-f merge_method=rebase || gh pr close $PR_NUMBER
