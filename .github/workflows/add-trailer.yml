@@ -62,6 +62,7 @@ jobs:
                 throw new Error(`No open PR found for ${headBranch}`)
               }
               pr = matchingPRs[0];
+              console.log(pr);
 
               const actor = context.payload.workflow_run.triggering_actor.login;
               const req = await fetch(`https://api.github.com/users/${actor}`);
