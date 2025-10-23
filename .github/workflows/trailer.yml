@@ -34,12 +34,11 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.payload.issue.number
             })
-            console.log("pr", pr)
             core.setOutput("repository", pr.head.repo.full_name);
             core.setOutput("head_ref", pr.head.ref);
             core.setOutput("commits", pr.commits);
             core.setOutput("number", pr.number);
-            console.log("body", github.event.comment.body)
+            console.log("body", context.payload.comment.body)
             const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i;
             const match = context.payload.comment.body.match(regexp);
             if (match) {
