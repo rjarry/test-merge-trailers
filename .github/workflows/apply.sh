@@ -126,7 +126,10 @@ git checkout "$GITHUB_BASE_REF"
 git merge --ff-only "$GITHUB_HEAD_REF"
 git push origin "$GITHUB_BASE_REF"
 
-gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers."
+gh pr comment "$PR_NUMBER" -b "Pull request applied with git trailers:
+\`\`\`
+$(cat $tmp/trailers-uniq)
+\`\`\`"
 
 # 'gh pr merge --rebase' will do nothing since the branch was already pushed
 # bypass the check and invoke the API endpoint directly
