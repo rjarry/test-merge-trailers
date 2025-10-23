@@ -38,28 +38,26 @@ jobs:
             core.setOutput("head_ref", pr.head.ref);
             core.setOutput("commits", pr.commits);
             core.setOutput("number", pr.number);
-            console.log("body", context.payload.comment.body)
             const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i;
             const match = context.payload.comment.body.match(regexp);
-            console.log("match", match)
             if (match) {
                 core.setOutput("trailer", `${match[1]}-by: ${match[2]} <${match[3]}>`);
             }
 
       - uses: actions/checkout@v4
-        if: ${{ steps.trailer.outputs.result.trailer }}
+        if: ${{ success() && steps.data.outputs.result.trailer }}
         with:
-          repository: ${{ steps.trailer.outputs.result.repo }}
-          ref: ${{ steps.trailer.outputs.result.head_ref }}
+          repository: ${{ steps.data.outputs.result.repo }}
+          ref: ${{ steps.data.outputs.result.head_ref }}
           token: ${{ steps.bot.outputs.token }}
           fetch-depth: 0
           persist-credentials: false
 
       - run: .github/workflows/add-trailer.sh
-        if: ${{ steps.trailer.outputs.result.trailer }}
+        if: ${{ success() && steps.data.outputs.result.trailer }}
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
-          PR_NUMBER: ${{ steps.trailer.outputs.result.number }}
-          PR_COMMITS: ${{ steps.trailer.outputs.result.commits }}
-          HEAD_REF: ${{ steps.trailer.outputs.result.head_ref }}
-          TRAILER: ${{ steps.trailer.outputs.result.trailer }}
+          PR_NUMBER: ${{ steps.data.outputs.result.number }}
+          PR_COMMITS: ${{ steps.data.outputs.result.commits }}
+          HEAD_REF: ${{ steps.data.outputs.result.head_ref }}
+          TRAILER: ${{ steps.data.outputs.result.trailer }}

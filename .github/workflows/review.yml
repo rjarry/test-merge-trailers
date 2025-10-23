@@ -58,6 +58,7 @@ jobs:
             return `Reviewed-by: ${user.name} <${user.email}>`;
 
       - run: .github/workflows/add-trailer.sh
+        if: success()
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
