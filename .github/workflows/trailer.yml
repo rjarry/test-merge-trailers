@@ -38,7 +38,7 @@ jobs:
             core.setOutput("head_ref", pr.head.ref);
             core.setOutput("commits", pr.commits);
             core.setOutput("number", pr.number);
-            const regexp = /(?i)(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/;
+            const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i;
             const match = context.payload.comment.body.match(regexp);
             if (match) {
                 core.setOutput("trailer", `${match[1]}-by: ${match[2]} <${match[3]}>`);
