@@ -16,7 +16,7 @@ jobs:
     if: ${{ github.event.issue.pull_request && (startsWith(github.event.comment.body, 'Acked-by:') || startsWith(github.event.comment.body, 'Tested-by:')) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Generate trailer-bot app token
+      - name: Generate app token
         uses: actions/create-github-app-token@v2
         id: bot
         with:
@@ -27,7 +27,7 @@ jobs:
         id: data
         uses: actions/github-script@v7
         with:
-          github-token: ${{ steps.app.outputs.token }}
+          github-token: ${{ steps.bot.outputs.token }}
           script: |
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,

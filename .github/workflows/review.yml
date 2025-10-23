@@ -15,7 +15,7 @@ jobs:
     if: github.event.review.state == 'approved'
     runs-on: ubuntu-latest
     steps:
-      - name: Generate trailer-bot app token
+      - name: Generate app token
         uses: actions/create-github-app-token@v2
         id: bot
         with:
@@ -34,7 +34,7 @@ jobs:
         id: trailer
         uses: actions/github-script@v7
         with:
-          github-token: ${{ steps.app.outputs.token }}
+          github-token: ${{ steps.bot.outputs.token }}
           script: |
             const user = await github.rest.users.getByUsername({username: context.actor});
             if (user.name == null) {
