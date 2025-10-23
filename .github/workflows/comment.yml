@@ -34,32 +34,34 @@ jobs:
             });
             return {
               trailer: `${match[1]}-by: ${match[2]} <${match[3]}>`,
-              pr_commits: String(pr.commits),
-              pr_head_repo: pr.head.repo.full_name,
-              pr_head_ref: pr.head.ref,
+              commits: String(pr.commits),
+              head_repo: pr.head.repo.full_name,
+              head_ref: pr.head.ref,
             };
 
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.TRAILER_BOT_TOKEN }}
-          repository: ${{ fromJSON(steps.parse.outputs.result).pr_head_repo }}
-          ref: ${{ fromJSON(steps.parse.outputs.result).pr_head_ref }}
+          repository: ${{ fromJSON(steps.parse.outputs.result).head_repo }}
+          ref: ${{ fromJSON(steps.parse.outputs.result).head_ref }}
           fetch-depth: 0
           persist-credentials: true
 
       - name: Amend all pull request commits with the new trailer
+        env:
+          GIT_TRAILER_DEBUG: 1
+          COMMITS: ${{ fromJSON(steps.parse.outputs.result).commits }}
+          HEAD_REF: ${{ fromJSON(steps.parse.outputs.result).head_ref }}
+          TRAILER: ${{ fromJSON(steps.parse.outputs.result).trailer }}
         run: |
           set -xe
-          # configure git identity to the most recent committer
           GIT_COMMITTER_NAME=$(git log -1 --pretty=%cN)
           GIT_COMMITTER_EMAIL=$(git log -1 --pretty=%cE)
           git config set user.name "$GIT_COMMITTER_NAME"
           git config set user.email "$GIT_COMMITTER_EMAIL"
           export GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
-          # add commit-msg hook to remove duplicate trailers and ensure correct ordering
           rm -f .git/hooks/commit-msg
           ln -s ../../devtools/commit-msg .git/hooks/commit-msg
-          # rewrite all commit messages, appending the trailer
-          GIT_TRAILER_DEBUG=1 git rebase 'HEAD~${{ fromJSON(steps.parse.outputs.result).pr_commits }}' \
-            --exec 'git commit -C HEAD --no-edit --amend --trailer="${{ fromJSON(steps.parse.outputs.result).trailer }}"'
-          git push --force origin "${{ fromJSON(steps.parse.outputs.result).pr_head_ref }}"
+          git rebase "HEAD~$COMMITS" \
+            --exec "git commit -C HEAD --no-edit --amend --trailer='$TRAILER'"
+          git push --force origin "$HEAD_REF"
