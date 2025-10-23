@@ -16,18 +16,11 @@ jobs:
     if: ${{ github.event.issue.pull_request && (startsWith(github.event.comment.body, 'Acked-by:') || startsWith(github.event.comment.body, 'Tested-by:')) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Generate app token
-        uses: actions/create-github-app-token@v2
-        id: bot
-        with:
-          app-id: ${{ secrets.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
-
       - name: Resolve trailer data
         id: data
         uses: actions/github-script@v7
         with:
-          github-token: ${{ steps.bot.outputs.token }}
+          github-token: ${{ secrets.BOT_TOKEN }}
           script: |
             const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i;
             const match = context.payload.comment.body.match(regexp);
@@ -52,14 +45,14 @@ jobs:
         with:
           repository: ${{ fromJSON(steps.data.outputs.result).repo }}
           ref: ${{ fromJSON(steps.data.outputs.result).head_ref }}
-          token: ${{ steps.bot.outputs.token }}
+          token: ${{ secrets.BOT_TOKEN }}
           fetch-depth: 0
           persist-credentials: false
 
       - run: .github/workflows/add-trailer.sh
         if: ${{ success() && fromJSON(steps.data.outputs.result).trailer }}
         env:
-          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
           PR_NUMBER: ${{ fromJSON(steps.data.outputs.result).number }}
           PR_COMMITS: ${{ fromJSON(steps.data.outputs.result).commits }}
           HEAD_REF: ${{ fromJSON(steps.data.outputs.result).head_ref }}
