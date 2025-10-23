@@ -50,8 +50,8 @@ jobs:
               workflow_id: 'add-trailer.yml',
               ref: 'main',
               inputs: {
-                pr_number: github.event.pull_request.number,
-                pr_commits: github.event.pull_request.commits,
+                pr_number: String(github.event.pull_request.number),
+                pr_commits: String(github.event.pull_request.commits),
                 pr_head_repo: github.event.pull_request.head.repo.full_name,
                 pr_head_ref: github.event.pull_request.head.ref,
                 trailer: `Reviewed-by: ${user.name} <${user.email}>`,

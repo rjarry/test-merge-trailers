@@ -36,8 +36,8 @@ jobs:
               workflow_id: 'add-trailer.yml',
               ref: 'main',
               inputs: {
-                pr_number: pr.number,
-                pr_commits: pr.commits,
+                pr_number: String(pr.number),
+                pr_commits: String(pr.commits),
                 pr_head_repo: pr.head.repo.full_name,
                 pr_head_ref: pr.head.ref,
                 trailer: `${match[1]}-by: ${match[2]} <${match[3]}>`,
