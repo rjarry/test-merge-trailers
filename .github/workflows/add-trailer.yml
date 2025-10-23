@@ -31,7 +31,7 @@ jobs:
             let pr, trailer;
             if (context.eventName === 'issue_comment') {
               // Parse trailer from comment
-              const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?>?/i;
+              const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)(?:\s+<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>)?/i;
               const match = context.payload.comment.body.match(regexp);
               if (!match) {
                 core.setFailed('No valid trailer found in comment');
