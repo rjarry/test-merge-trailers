@@ -45,12 +45,11 @@ jobs:
               trailer = `${match[1]}-by: ${match[2]} <${match[3] || 'UNKNOWN_EMAIL'}>`;
             } else if (context.eventName === 'workflow_run') {
               const branch = context.payload.workflow_run.head_branch;
-              console.log(context.payload);
               const { data: prList } = await github.rest.pulls.list({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 state: 'open',
-                head: `${context.payload.workflow_run.head_repository.owner.login}:${branch}`,
+                head: branch,
               });
               if (prList.length === 0) {
                 throw new Error(`No open PR found for branch: ${branch}`)
