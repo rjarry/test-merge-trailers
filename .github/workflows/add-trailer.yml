@@ -31,7 +31,7 @@ jobs:
           repository: ${{ inputs.pr_head_repo }}
           ref: ${{ inputs.pr_head_ref }}
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
 
       - run: .github/workflows/add-trailer.sh
         env:
