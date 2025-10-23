@@ -60,6 +60,7 @@ jobs:
               const user = await req.json();
               trailer = `Reviewed-by: ${user.name || actor} <${user.email || 'UNKNOWN_EMAIL'}>`;
             }
+            console.log(pr)
             return {
               commits: String(pr.commits),
               head_repo: pr.head.repo.full_name,
@@ -91,7 +92,7 @@ jobs:
                 --group=trailer:acked-by --group=trailer:reviewed-by \
                 --group=trailer:reported-by --group=trailer:signed-off-by \
                 --group=trailer:tested-by HEAD | \
-                sed -En "s/^[[:space:]]+[0-9]+[[:space:]]+$NAME <([^@]+@[^>]+)>$/\\1/p")
+                sed -En "s/^[[:space:]]+[0-9]+[[:space:]]+$NAME <([^@]+@[^>]+)>$/\\1/p" | head -n1)
             fi
             if [ -z "$EMAIL" ]; then
               echo "Error: Could not find email for $NAME"
