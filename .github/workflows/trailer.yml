@@ -20,7 +20,7 @@ jobs:
         id: data
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.BOT_TOKEN }}
+          github-token: ${{ secrets.TRAILER_BOT_TOKEN }}
           script: |
             const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i;
             const match = context.payload.comment.body.match(regexp);
@@ -45,14 +45,14 @@ jobs:
         with:
           repository: ${{ fromJSON(steps.data.outputs.result).repo }}
           ref: ${{ fromJSON(steps.data.outputs.result).head_ref }}
-          token: ${{ secrets.BOT_TOKEN }}
+          token: ${{ secrets.TRAILER_BOT_TOKEN }}
           fetch-depth: 0
           persist-credentials: false
 
       - run: .github/workflows/add-trailer.sh
         if: ${{ success() && fromJSON(steps.data.outputs.result).trailer }}
         env:
-          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.TRAILER_BOT_TOKEN }}
           PR_NUMBER: ${{ fromJSON(steps.data.outputs.result).number }}
           PR_COMMITS: ${{ fromJSON(steps.data.outputs.result).commits }}
           HEAD_REF: ${{ fromJSON(steps.data.outputs.result).head_ref }}
