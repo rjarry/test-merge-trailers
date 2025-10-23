@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2025 Robin Jarry
+---
+name: Trailer
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        required: true
+      pr_commits:
+        required: true
+      pr_head_repo:
+        required: true
+      pr_head_ref:
+        required: true
+      trailer:
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TRAILER_BOT_TOKEN }}
+          repository: ${{ inputs.pr_head_repo }}
+          ref: ${{ inputs.pr_head_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - run: .github/workflows/add-trailer.sh
+        env:
+          GH_TOKEN: ${{ secrets.TRAILER_BOT_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_COMMITS: ${{ inputs.pr_commits }}
+          HEAD_REF: ${{ inputs.pr_head_ref }}
+          TRAILER: ${{ inputs.trailer }}
