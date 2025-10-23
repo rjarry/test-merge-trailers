@@ -44,6 +44,7 @@ jobs:
               pr = prData;
               trailer = `${match[1]}-by: ${match[2]} <${match[3] || 'UNKNOWN_EMAIL'}>`;
             } else if (context.eventName === 'workflow_run') {
+              console.log(context.payload);
               const branch = context.payload.workflow_run.head_branch;
               const { data: prList } = await github.rest.pulls.list({
                 owner: context.repo.owner,
@@ -60,7 +61,6 @@ jobs:
               const user = await req.json();
               trailer = `Reviewed-by: ${user.name || actor} <${user.email || 'UNKNOWN_EMAIL'}>`;
             }
-            console.log(pr)
             return {
               commits: String(pr.commits),
               head_repo: pr.head.repo.full_name,
