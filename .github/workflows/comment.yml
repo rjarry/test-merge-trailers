@@ -16,7 +16,7 @@ jobs:
     if: ${{ github.event.issue.pull_request && (contains(github.event.comment.body, 'Acked-by:') || contains(github.event.comment.body, 'Tested-by:')) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve trailer data
+      - name: Trigger the add-trailer.yml job
         uses: actions/github-script@v7
         with:
           script: |
