@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2025 Robin Jarry
+---
+name: Trailer
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  add:
+    if: ${{ github.event.issue.pull_request && github.event.comment.body =~ '(?i)(acked|tested)-by:\s+\w[^<]+\w\s+<?[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}>?' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate trailer-bot app token
+        uses: actions/create-github-app-token@v2
+        id: bot
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
+      - name: Resolve trailer data
+        id: data
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app.outputs.token }}
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.issue.number
+            })
+            core.setOutput("repository", pr.head.repo.full_name);
+            core.setOutput("head_ref", pr.head.ref);
+            core.setOutput("commits", pr.commits);
+            core.setOutput("number", pr.number);
+            const regexp = /(?i)(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/;
+            const match = context.payload.comment.body.match(regexp);
+            if (match == null) {
+                core.setFailed(`trailer not found in comment: "${context.payload.comment.body}"`);
+                process.exit(1);
+            }
+            core.setOutput("trailer", `${match[1]}-by: ${match[2]} <${match[3]}>`);
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.trailer.outputs.result.repo }}
+          ref: ${{ steps.trailer.outputs.result.head_ref }}
+          token: ${{ steps.bot.outputs.token }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - run: .github/workflows/add-trailer.sh
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          PR_NUMBER: ${{ steps.trailer.outputs.result.number }}
+          PR_COMMITS: ${{ steps.trailer.outputs.result.commits }}
+          HEAD_REF: ${{ steps.trailer.outputs.result.head_ref }}
+          TRAILER: ${{ steps.trailer.outputs.result.trailer }}
