@@ -8,37 +8,58 @@ on:
     types: [created]
 
 permissions:
-  pull-requests: read
-  actions: write
+  contents: write
+  pull-requests: write
 
 jobs:
   posted:
-    if: ${{ github.event.issue.pull_request && (contains(github.event.comment.body, 'Acked-by:') || contains(github.event.comment.body, 'Tested-by:')) }}
+    if: ${{ github.event.issue.pull_request && (contains(github.event.comment.body, 'Acked-by:') || contains(github.event.comment.body, 'Tested-by:') || contains(github.event.comment.body, 'Reviewed-by:')) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger the add-trailer.yml job
+      - name: Parse trailer from comment
+        id: parse
         uses: actions/github-script@v7
         with:
           script: |
-            const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i;
+            const regexp = /(acked|tested|reviewed)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i;
             const match = context.payload.comment.body.match(regexp);
             if (!match) {
+              core.setFailed('No valid trailer found in comment');
               return;
             }
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.issue.number
-            })
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'add-trailer.yml',
-              ref: 'main',
-              inputs: {
-                pr_commits: String(pr.commits),
-                pr_head_repo: pr.head.repo.full_name,
-                pr_head_ref: pr.head.ref,
-                trailer: `${match[1]}-by: ${match[2]} <${match[3]}>`,
-              }
             });
+            return {
+              trailer: `${match[1]}-by: ${match[2]} <${match[3]}>`,
+              pr_commits: String(pr.commits),
+              pr_head_repo: pr.head.repo.full_name,
+              pr_head_ref: pr.head.ref,
+            };
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TRAILER_BOT_TOKEN }}
+          repository: ${{ fromJSON(steps.parse.outputs.result).pr_head_repo }}
+          ref: ${{ fromJSON(steps.parse.outputs.result).pr_head_ref }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Amend all pull request commits with the new trailer
+        run: |
+          set -xe
+          # configure git identity to the most recent committer
+          GIT_COMMITTER_NAME=$(git log -1 --pretty=%cN)
+          GIT_COMMITTER_EMAIL=$(git log -1 --pretty=%cE)
+          git config set user.name "$GIT_COMMITTER_NAME"
+          git config set user.email "$GIT_COMMITTER_EMAIL"
+          export GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+          # add commit-msg hook to remove duplicate trailers and ensure correct ordering
+          rm -f .git/hooks/commit-msg
+          ln -s ../../devtools/commit-msg .git/hooks/commit-msg
+          # rewrite all commit messages, appending the trailer
+          GIT_TRAILER_DEBUG=1 git rebase 'HEAD~${{ fromJSON(steps.parse.outputs.result).pr_commits }}' \
+            --exec 'git commit -C HEAD --no-edit --amend --trailer="${{ fromJSON(steps.parse.outputs.result).trailer }}"'
+          git push --force origin "${{ fromJSON(steps.parse.outputs.result).pr_head_ref }}"

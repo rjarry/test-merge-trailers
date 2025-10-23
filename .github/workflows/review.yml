@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: read
-  actions: write
+  pull-requests: write
 
 jobs:
   approved:
@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Trigger the add-trailer.yml job
+      - name: Post comment to trigger trailer addition
         uses: actions/github-script@v7
         with:
           script: |
@@ -44,15 +44,9 @@ jobs:
                 process.exit(1);
               }
             }
-            await github.rest.actions.createWorkflowDispatch({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: 'add-trailer.yml',
-              ref: 'main',
-              inputs: {
-                pr_commits: String(github.event.pull_request.commits),
-                pr_head_repo: github.event.pull_request.head.repo.full_name,
-                pr_head_ref: github.event.pull_request.head.ref,
-                trailer: `Reviewed-by: ${user.name} <${user.email}>`,
-              }
+              issue_number: context.payload.pull_request.number,
+              body: `Reviewed-by: ${user.name} <${user.email}>`,
             });
