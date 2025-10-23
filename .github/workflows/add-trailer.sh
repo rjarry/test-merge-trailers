@@ -28,8 +28,3 @@ GIT_TRAILER_DEBUG=1 git rebase "HEAD~$PR_COMMITS" \
 	--exec "git commit -C HEAD --no-edit --amend --trailer='$TRAILER'"
 
 git push --force origin "$HEAD_REF"
-
-gh pr comment "$PR_NUMBER" -b "Added trailer to all commits:
-\`\`\`
-$TRAILER
-\`\`\`"
