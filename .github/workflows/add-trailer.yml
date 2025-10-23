@@ -30,12 +30,11 @@ jobs:
           script: |
             let pr, trailer;
             if (context.eventName === 'issue_comment') {
-              // Parse trailer from comment
+              const body = context.payload.comment.body;
               const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)(?:\s+<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>)?/i;
-              const match = context.payload.comment.body.match(regexp);
+              const match = body.match(regexp);
               if (!match) {
-                core.setFailed('No valid trailer found in comment');
-                return;
+                throw new Error(`No valid trailer found in comment: ${body}`)
               }
               const { data: prData } = await github.rest.pulls.get({
                 owner: context.repo.owner,
@@ -45,15 +44,16 @@ jobs:
               pr = prData;
               trailer = `${match[1]}-by: ${match[2]} <${match[3] || 'UNKNOWN_EMAIL'}>`;
             } else if (context.eventName === 'workflow_run') {
+              const branch = context.payload.workflow_run.head_branch;
+              console.log(context.payload);
               const { data: prList } = await github.rest.pulls.list({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 state: 'open',
-                head: `${context.payload.workflow_run.head_repository.owner.login}:${context.payload.workflow_run.head_branch}`,
+                head: `${context.payload.workflow_run.head_repository.owner.login}:${branch}`,
               });
               if (prList.length === 0) {
-                core.setFailed('No open PR found for this branch');
-                return;
+                throw new Error(`No open PR found for branch: ${branch}`)
               }
               pr = prList[0];
               const actor = context.payload.workflow_run.triggering_actor.login;
