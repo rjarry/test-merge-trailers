@@ -8,7 +8,7 @@ on:
     types: [submitted]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   approved:
@@ -21,8 +21,8 @@ jobs:
           persist-credentials: false
 
       - name: Resolve reviewer name and email
-        id: trailer
         uses: actions/github-script@v7
+        github-token: ${{ secrets.TRAILER_BOT_TOKEN }}
         with:
           script: |
             const user = await github.rest.users.getByUsername({username: context.actor});
