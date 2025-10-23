@@ -9,45 +9,11 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: read
 
 jobs:
   approved:
     if: github.event.review.state == 'approved'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Post comment to trigger trailer addition
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const req = await fetch(`https://api.github.com/users/${context.actor}`);
-            const user = await req.json();
-            if (user.name == null) {
-              user.name = context.actor;
-            }
-            if (user.email == null) {
-              await exec.exec('sh', ['-c', `git log --pretty=%aE --author="${user.name}" | head -n1`], {
-                failOnStdErr: true,
-                listeners: {
-                  stdline: (data) => {
-                    user.email = data.toString();
-                  },
-                },
-              });
-              if (user.email == null) {
-                core.setFailed(`user @${context.actor} does not expose their email and is unknown from git history`);
-                process.exit(1);
-              }
-            }
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body: `Reviewed-by: ${user.name} <${user.email}>`,
-            });
+      - name: Review approved
+        run: echo "PR approved by ${{ github.event.review.user.login }}"
