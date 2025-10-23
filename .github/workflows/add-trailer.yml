@@ -6,8 +6,6 @@ name: Trailer
 on:
   workflow_dispatch:
     inputs:
-      pr_number:
-        required: true
       pr_commits:
         required: true
       pr_head_repo:
@@ -33,10 +31,19 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - run: .github/workflows/add-trailer.sh
-        env:
-          GH_TOKEN: ${{ secrets.TRAILER_BOT_TOKEN }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-          PR_COMMITS: ${{ inputs.pr_commits }}
-          HEAD_REF: ${{ inputs.pr_head_ref }}
-          TRAILER: ${{ inputs.trailer }}
+      - name: Amend all pull request commits with the new trailer
+        run: |
+          set -xe
+          # configure git identity to the most recent committer
+          GIT_COMMITTER_NAME=$(git log -1 --pretty=%cN)
+          GIT_COMMITTER_EMAIL=$(git log -1 --pretty=%cE)
+          git config set user.name "$GIT_COMMITTER_NAME"
+          git config set user.email "$GIT_COMMITTER_EMAIL"
+          export GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+          # add commit-msg hook to remove duplicate trailers and ensure correct ordering
+          rm -f .git/hooks/commit-msg
+          ln -s ../../devtools/commit-msg .git/hooks/commit-msg
+          # rewrite all commit messages, appending the trailer
+          GIT_TRAILER_DEBUG=1 git rebase 'HEAD~${{ inputs.pr_commits }}' \
+            --exec 'git commit -C HEAD --no-edit --amend --trailer="${{ inputs.trailer }}"'
+          git push --force origin "${{ inputs.pr_head_ref }}"
