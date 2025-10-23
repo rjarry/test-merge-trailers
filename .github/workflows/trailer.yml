@@ -29,20 +29,23 @@ jobs:
         with:
           github-token: ${{ steps.bot.outputs.token }}
           script: |
+            const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i;
+            const match = context.payload.comment.body.match(regexp);
+            if (!match) {
+              return {};
+            }
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.issue.number
             })
-            core.setOutput("repository", pr.head.repo.full_name);
-            core.setOutput("head_ref", pr.head.ref);
-            core.setOutput("commits", pr.commits);
-            core.setOutput("number", pr.number);
-            const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i;
-            const match = context.payload.comment.body.match(regexp);
-            if (match) {
-                core.setOutput("trailer", `${match[1]}-by: ${match[2]} <${match[3]}>`);
-            }
+            return {
+              repository: pr.head.repo.full_name,
+              head_ref: pr.head.ref,
+              commits: pr.commits,
+              number: pr.number,
+              trailer: `${match[1]}-by: ${match[2]} <${match[3]}>`,
+            };
 
       - uses: actions/checkout@v4
         if: ${{ success() && steps.data.outputs.result.trailer }}
