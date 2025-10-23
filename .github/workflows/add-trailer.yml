@@ -29,6 +29,7 @@ jobs:
         with:
           script: |
             let pr, trailer;
+
             if (context.eventName === 'issue_comment') {
               const body = context.payload.comment.body;
               const regexp = /(acked|tested)-by:\s+(\w[^<]+\w)(?:\s+<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>)?/i;
@@ -36,32 +37,38 @@ jobs:
               if (!match) {
                 throw new Error(`No valid trailer found in comment: ${body}`)
               }
+
               const { data: prData } = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.payload.issue.number
               });
+
               pr = prData;
               trailer = `${match[1]}-by: ${match[2]} <${match[3] || 'UNKNOWN_EMAIL'}>`;
+
             } else if (context.eventName === 'workflow_run') {
-              console.log(context.payload);
-              const branch = context.payload.workflow_run.head_branch;
-              const { data: prList } = await github.rest.pulls.list({
+              const headBranch = context.payload.workflow_run.head_branch;
+
+              const { data: allPRs } = await github.rest.pulls.list({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 state: 'open',
-                head: branch,
               });
-              console.log(prList);
-              if (prList.length === 0) {
-                throw new Error(`No open PR found for branch: ${branch}`)
+
+              const matchingPRs = allPRs.filter(p => p.head.ref === headBranch);
+
+              if (matchingPRs.length === 0) {
+                throw new Error(`No open PR found for ${headBranch}`)
               }
-              pr = prList[0];
+              pr = matchingPRs[0];
+
               const actor = context.payload.workflow_run.triggering_actor.login;
               const req = await fetch(`https://api.github.com/users/${actor}`);
               const user = await req.json();
               trailer = `Reviewed-by: ${user.name || actor} <${user.email || 'UNKNOWN_EMAIL'}>`;
             }
+
             return {
               commits: String(pr.commits),
               head_repo: pr.head.repo.full_name,
@@ -85,9 +92,11 @@ jobs:
           TRAILER: ${{ fromJSON(steps.info.outputs.result).trailer }}
         run: |
           set -xe
+
           if echo "$TRAILER" | grep -qw 'UNKNOWN_EMAIL'; then
             NAME=$(echo "$TRAILER" | sed -En 's/.+-by:[[:blank:]]+([^<]+)[[:blank:]]<.+/\1/p')
             EMAIL=$(git log --pretty=%aE --author="$NAME" | head -n1)
+
             if [ -z "$EMAIL" ]; then
               EMAIL=$(git shortlog -se -w0 --group=author --group=committer \
                 --group=trailer:acked-by --group=trailer:reviewed-by \
@@ -95,19 +104,25 @@ jobs:
                 --group=trailer:tested-by HEAD | \
                 sed -En "s/^[[:space:]]+[0-9]+[[:space:]]+$NAME <([^@]+@[^>]+)>$/\\1/p" | head -n1)
             fi
+
             if [ -z "$EMAIL" ]; then
               echo "Error: Could not find email for $NAME"
               exit 1
             fi
+
             TRAILER=$(echo "$TRAILER" | sed "s/\\<UNKNOWN_EMAIL\\>/$EMAIL/")
           fi
+
           GIT_COMMITTER_NAME=$(git log -1 --pretty=%cN)
           GIT_COMMITTER_EMAIL=$(git log -1 --pretty=%cE)
           git config set user.name "$GIT_COMMITTER_NAME"
           git config set user.email "$GIT_COMMITTER_EMAIL"
           export GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+
           rm -f .git/hooks/commit-msg
           ln -s ../../devtools/commit-msg .git/hooks/commit-msg
+
           git rebase "HEAD~$COMMITS" \
             --exec "git commit -C HEAD --no-edit --amend --trailer='$TRAILER'"
+
           git push --force origin "$HEAD_REF"
