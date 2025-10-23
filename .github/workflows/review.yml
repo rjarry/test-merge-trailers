@@ -15,6 +15,13 @@ jobs:
     if: github.event.review.state == 'approved'
     runs-on: ubuntu-latest
     steps:
+      - name: Check context
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Base ref: ${{ github.event.pull_request.base.ref }}"
+          echo "Has token: ${{ secrets.TRAILER_BOT_TOKEN != '' }}"
+
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
