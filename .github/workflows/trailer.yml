@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   add:
-    if: ${{ github.event.issue.pull_request && github.event.comment.body =~ '(?i)(acked|tested)-by:\s+\w[^<]+\w\s+<?[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}>?' }}
+    if: ${{ github.event.issue.pull_request && (startsWith(github.event.comment.body, 'Acked-by:') || startsWith(github.event.comment.body, 'Tested-by:')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Generate trailer-bot app token
@@ -40,13 +40,12 @@ jobs:
             core.setOutput("number", pr.number);
             const regexp = /(?i)(acked|tested)-by:\s+(\w[^<]+\w)\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/;
             const match = context.payload.comment.body.match(regexp);
-            if (match == null) {
-                core.setFailed(`trailer not found in comment: "${context.payload.comment.body}"`);
-                process.exit(1);
+            if (match) {
+                core.setOutput("trailer", `${match[1]}-by: ${match[2]} <${match[3]}>`);
             }
-            core.setOutput("trailer", `${match[1]}-by: ${match[2]} <${match[3]}>`);
 
       - uses: actions/checkout@v4
+        if: ${{ steps.trailer.outputs.result.trailer }}
         with:
           repository: ${{ steps.trailer.outputs.result.repo }}
           ref: ${{ steps.trailer.outputs.result.head_ref }}
@@ -55,6 +54,7 @@ jobs:
           persist-credentials: false
 
       - run: .github/workflows/add-trailer.sh
+        if: ${{ steps.trailer.outputs.result.trailer }}
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
           PR_NUMBER: ${{ steps.trailer.outputs.result.number }}
