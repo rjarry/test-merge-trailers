@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
 
       - run: .github/workflows/add-trailer.sh
-        if: ${{ success() && steps.data.outputs.result.trailer }}
+        if: ${{ success() && fromJSON(steps.data.outputs.result).trailer }}
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
           PR_NUMBER: ${{ fromJSON(steps.data.outputs.result).number }}
