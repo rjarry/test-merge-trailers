@@ -8,4 +8,4 @@ soulant comme activité, nulxc wxwc
 
 # Copyright
 
-2025 (c) Jacky 48
+2025 (c) Jacky 48 - this is not a PR
