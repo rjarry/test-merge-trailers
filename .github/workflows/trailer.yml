@@ -48,10 +48,10 @@ jobs:
             };
 
       - uses: actions/checkout@v4
-        if: ${{ success() && steps.data.outputs.result.trailer }}
+        if: ${{ success() && fromJSON(steps.data.outputs.result).trailer }}
         with:
-          repository: ${{ steps.data.outputs.result.repo }}
-          ref: ${{ steps.data.outputs.result.head_ref }}
+          repository: ${{ fromJSON(steps.data.outputs.result).repo }}
+          ref: ${{ fromJSON(steps.data.outputs.result).head_ref }}
           token: ${{ steps.bot.outputs.token }}
           fetch-depth: 0
           persist-credentials: false
@@ -60,7 +60,7 @@ jobs:
         if: ${{ success() && steps.data.outputs.result.trailer }}
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
-          PR_NUMBER: ${{ steps.data.outputs.result.number }}
-          PR_COMMITS: ${{ steps.data.outputs.result.commits }}
-          HEAD_REF: ${{ steps.data.outputs.result.head_ref }}
-          TRAILER: ${{ steps.data.outputs.result.trailer }}
+          PR_NUMBER: ${{ fromJSON(steps.data.outputs.result).number }}
+          PR_COMMITS: ${{ fromJSON(steps.data.outputs.result).commits }}
+          HEAD_REF: ${{ fromJSON(steps.data.outputs.result).head_ref }}
+          TRAILER: ${{ fromJSON(steps.data.outputs.result).trailer }}
