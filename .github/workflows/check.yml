@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   build-and-tests:
+    if: ${{ github.actor != 'grout-bot' }}
     strategy:
       fail-fast: false
       matrix:
